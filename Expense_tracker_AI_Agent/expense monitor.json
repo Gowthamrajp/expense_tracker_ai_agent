@@ -1,0 +1,400 @@
+{
+  "name": "expense monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "id": "e708ad31-0d2a-499d-a2cc-7b3424cbe537",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract email content and metadata\nconst emails = $input.all();\nconst processedEmails = [];\n\nfor (const email of emails) {\n  const emailData = email.json;\n  \n  // Extract email body (handle both plain text and HTML)\n  let emailBody = '';\n  let htmlBody = '';\n  \n  // Get HTML body directly from email.json.html\n  if (emailData.html) {\n    htmlBody = emailData.html;\n  }\n  \n  // Get plain text body if available\n  if (emailData.text) {\n    emailBody = emailData.text;\n  }\n  \n  // Extract transaction details from HTML body\n  let transactionDetails = {\n    amount: null,\n    transactionType: null,\n    merchant: null,\n    cardNumber: null,\n    date: null,\n    referenceNumber: null\n  };\n  \n  if (htmlBody) {\n    // Remove HTML tags and get clean text\n    const cleanText = htmlBody.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim();\n    \n    // Extract amount - improved regex to catch more formats\n    const amountMatch = cleanText.match(/(?:Rs\\.?|INR)\\s*([\\d,]+\\.\\d{2})/i);\n    if (amountMatch) {\n      transactionDetails.amount = parseFloat(amountMatch[1].replace(/,/g, ''));\n    }\n    \n    // Extract transaction type (debited/credited)\n    if (cleanText.includes('debited')) {\n      transactionDetails.transactionType = 'debit';\n    } else if (cleanText.includes('credited')) {\n      transactionDetails.transactionType = 'credit';\n    }\n    \n    // Extract card number (XX#### format)\n    const cardMatch = cleanText.match(/XX(\\d{4})/);\n    if (cardMatch) {\n      transactionDetails.cardNumber = 'XX' + cardMatch[1];\n    }\n    \n    // Extract merchant - improved regex to catch more patterns\n    const merchantMatch = cleanText.match(/(?:to|by)\\s+([^.]+?)(?:\\s+on|\\. Your UPI)/i);\n    if (merchantMatch) {\n      transactionDetails.merchant = merchantMatch[1].trim();\n    }\n    \n    // Extract date (DD-MM-YY format)\n    const dateMatch = cleanText.match(/(\\d{2}-\\d{2}-\\d{2})/);\n    if (dateMatch) {\n      transactionDetails.date = dateMatch[1];\n    }\n    \n    // Extract reference number\n    const refMatch = cleanText.match(/reference number is (\\d+)/);\n    if (refMatch) {\n      transactionDetails.referenceNumber = refMatch[1];\n    }\n  }\n  \n  processedEmails.push({\n    id: emailData.id,\n    subject: emailData.subject || '',\n    from: emailData.from || '',\n    date: emailData.date || '',\n    body: emailBody,\n    htmlBody: htmlBody,\n    snippet: emailData.snippet || '',\n    transactionDetails: transactionDetails\n  });\n}\n\nreturn processedEmails.map(email => ({ json: email }));"
+      },
+      "id": "3296b148-666f-4463-991c-a8afb514ba87",
+      "name": "Process Email Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract transaction data from processed emails\nconst emails = $input.all();\nconst transactions = [];\nconst failedTransactions = [];\n\nfor (const email of emails) {\n  const emailData = email.json;\n  const transactionDetails = emailData.transactionDetails;\n  \n  // Only process if we have transaction details with a detected type\n  if (transactionDetails && transactionDetails.transactionType) {\n    // Convert date format from DD-MM-YY to YYYY-MM-DD\n    let transactionDate = new Date().toISOString().split('T')[0];\n    if (transactionDetails.date) {\n      const [day, month, year] = transactionDetails.date.split('-');\n      transactionDate = `20${year}-${month}-${day}`;\n    }\n    \n    // Determine category based on transaction type and merchant\n    let category = 'Uncategorized';\n    if (transactionDetails.transactionType === 'debit') {\n      category = 'Purchase';\n    } else if (transactionDetails.transactionType === 'credit') {\n      category = 'Refund';\n    }\n    \n    // Create description\n    let description = emailData.subject || 'HDFC Transaction';\n    if (transactionDetails.merchant) {\n      description = `Transaction to ${transactionDetails.merchant}`;\n    }\n    \n    transactions.push({\n      transaction_date: transactionDate,\n      merchant: transactionDetails.merchant || 'Unknown',\n      amount: transactionDetails.amount,\n      category: category,\n      transaction_type: transactionDetails.transactionType || 'unknown',\n      description: description,\n      email_id: emailData.id,\n      extracted_at: new Date().toISOString(),\n      card_number: transactionDetails.cardNumber || '',\n      reference_number: transactionDetails.referenceNumber || ''\n    });\n  } else {\n    // Store failed transactions for debugging\n    failedTransactions.push({\n      email_id: emailData.id,\n      subject: emailData.subject || '',\n      from: emailData.from || '',\n      date: emailData.date || '',\n      snippet: emailData.snippet || '',\n      transaction_details: transactionDetails,\n      html_body_preview: emailData.htmlBody ? emailData.htmlBody.substring(0, 200) + '...' : 'No HTML body',\n      failure_reason: !transactionDetails ? 'No transaction details extracted' : 'No transaction type detected',\n      extracted_at: new Date().toISOString()\n    });\n  }\n}\n\n// Return both successful and failed transactions\nreturn {\n  successful: transactions.map(transaction => ({ json: transaction })),\n  failed: failedTransactions.map(failed => ({ json: failed }))\n};"
+      },
+      "id": "c1a4bf80-2fad-4982-9db2-cecddfaafbcd",
+      "name": "Extract Transaction Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": true,
+        "simple": false,
+        "filters": {
+          "receivedAfter": "2025-08-04T00:00:00",
+          "sender": "alerts@hdfcbank.net"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -20,
+        -180
+      ],
+      "id": "e3ff8801-2cf1-400e-ab55-92c674e3994f",
+      "name": "Get many messages",
+      "webhookId": "a722e123-52f0-4f99-9d54-db1d322db8ba",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "brqGtXndv1xl2KZZ",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1P5GrWjeG90lrrsEUeHTZnyLjv_hS2X4uTSoDDCvYar4",
+          "mode": "list",
+          "cachedResultName": "Expense Monitor",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1P5GrWjeG90lrrsEUeHTZnyLjv_hS2X4uTSoDDCvYar4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Transactions",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1P5GrWjeG90lrrsEUeHTZnyLjv_hS2X4uTSoDDCvYar4/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "transaction_date": "={{ $json.transaction_date }}",
+            "merchant": "={{ $json.merchant }}",
+            "amount": "={{ $json.amount }}",
+            "category": "={{ $json.category }}",
+            "transaction_type": "={{ $json.transaction_type }}",
+            "description": "={{ $json.description }}",
+            "extracted_at": "={{ $json.extracted_at }}",
+            "card_number": "={{ $json.card_number }}",
+            "reference_number": "={{ $json.reference_number }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "transaction_date",
+              "displayName": "transaction_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "merchant",
+              "displayName": "merchant",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "amount",
+              "displayName": "amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "transaction_type",
+              "displayName": "transaction_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "extracted_at",
+              "displayName": "extracted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "card_number",
+              "displayName": "card_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reference_number",
+              "displayName": "reference_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        640,
+        -180
+      ],
+      "id": "3e202d37-43ff-49aa-a7f2-41a848d1f9d3",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "thN9Z8XrQMqzWRHc",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1P5GrWjeG90lrrsEUeHTZnyLjv_hS2X4uTSoDDCvYar4",
+          "mode": "list",
+          "cachedResultName": "Expense Monitor",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1P5GrWjeG90lrrsEUeHTZnyLjv_hS2X4uTSoDDCvYar4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Transactions",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1P5GrWjeG90lrrsEUeHTZnyLjv_hS2X4uTSoDDCvYar4/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email_id": "={{ $json.email_id }}",
+            "subject": "={{ $json.subject }}",
+            "from": "={{ $json.from }}",
+            "date": "={{ $json.date }}",
+            "snippet": "={{ $json.snippet }}",
+            "failure_reason": "={{ $json.failure_reason }}",
+            "html_body_preview": "={{ $json.html_body_preview }}",
+            "extracted_at": "={{ $json.extracted_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "email_id",
+              "displayName": "email_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "from",
+              "displayName": "from",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date",
+              "displayName": "date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "snippet",
+              "displayName": "snippet",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "failure_reason",
+              "displayName": "failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "html_body_preview",
+              "displayName": "html_body_preview",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "extracted_at",
+              "displayName": "extracted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        640,
+        20
+      ],
+      "id": "4e202d37-43ff-49aa-a7f2-41a848d1f9d4",
+      "name": "Append Failed Transactions",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "thN9Z8XrQMqzWRHc",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get many messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Email Content": {
+      "main": [
+        [
+          {
+            "node": "Extract Transaction Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Transaction Data": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append Failed Transactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many messages": {
+      "main": [
+        [
+          {
+            "node": "Process Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "a980b52d-e900-4b70-95fa-65946b852366",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3f55b2206c14cce8c7422739064455be6f8ec6fecec770b5e506884330fa9817"
+  },
+  "id": "68FyTvUOMIebIGUV",
+  "tags": []
+}
