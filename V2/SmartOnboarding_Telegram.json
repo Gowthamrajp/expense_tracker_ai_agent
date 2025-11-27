@@ -1,0 +1,406 @@
+{
+  "name": "SmartOnboarding_Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        432,
+        -16
+      ],
+      "id": "c183d677-b21d-438e-86dc-d2b8b3ec195a",
+      "name": "Every Hour"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 414631077,
+          "mode": "list"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        640,
+        -16
+      ],
+      "id": "1549807e-17ab-41d8-b347-11494e50f063",
+      "name": "Read Unrecognized",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "5069314600",
+        "text": "=📧 From: {{ $json.email_from }}\nSubject: {{ $json.email_subject }}\n\n❓ Transaction?\n1=YES  2=BLOCK\n\n🔖{{ $json.gmail_message_id }}|{{ $json.email_from }}|{{ $json.email_subject }}|{{ $json.snippet_or_body }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1072,
+        -16
+      ],
+      "id": "321f8200-3127-4a99-970c-b9fcdc4e61d3",
+      "name": "Ask",
+      "webhookId": "5d4fb789-2118-4fe7-ae5b-5c441610e5ee",
+      "credentials": {
+        "telegramApi": {
+          "id": "KPVbdDwhR4AzKcA5",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        272
+      ],
+      "id": "b5dd0cd8-f57d-41d7-8134-30c235bca158",
+      "name": "User Response",
+      "webhookId": "onboard-resp",
+      "credentials": {
+        "telegramApi": {
+          "id": "KPVbdDwhR4AzKcA5",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "conditions": [
+            {
+              "id": "a",
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "2",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        192
+      ],
+      "id": "route1-block",
+      "name": "Is 2?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "conditions": [
+            {
+              "id": "b",
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "1",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        352
+      ],
+      "id": "route2-yes",
+      "name": "Is 1?"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 414631077,
+          "mode": "list"
+        },
+        "options": {
+          "rangeDefinition": "specifyRange",
+          "range": "A2:E2"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        720,
+        192
+      ],
+      "id": "extract-email",
+      "name": "Read Latest Email",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "5069314600",
+        "text": "💰 Amount?",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        720,
+        352
+      ],
+      "id": "ask-amount",
+      "name": "Ask Amount",
+      "webhookId": "ask-amount-webhook",
+      "credentials": {
+        "telegramApi": {
+          "id": "KPVbdDwhR4AzKcA5",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1784103976,
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email_from": "={{ $json.email_from }}",
+            "blocked_at": "={{$now}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "email_from",
+              "displayName": "email_from",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "blocked_at",
+              "displayName": "blocked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        960,
+        192
+      ],
+      "id": "e7432c75-493f-4798-b6bc-d36050c7fa58",
+      "name": "Block",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "5069314600",
+        "text": "🚫 Blocked",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        192
+      ],
+      "id": "0de937f1-ea17-4d8b-b41b-a1d4273c2d2b",
+      "name": "Confirm Block",
+      "webhookId": "2ff30bb1-9e79-4b69-b5b7-9fb26b211060",
+      "credentials": {
+        "telegramApi": {
+          "id": "KPVbdDwhR4AzKcA5",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        848,
+        -16
+      ],
+      "id": "7bcff5b4-3efa-4338-a8e0-cacf94c3f2bf",
+      "name": "Limit"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every Hour": {
+      "main": [
+        [
+          {
+            "node": "Read Unrecognized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Unrecognized": {
+      "main": [
+        [
+          {
+            "node": "Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Response": {
+      "main": [
+        [
+          {
+            "node": "Is 2?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is 2?": {
+      "main": [
+        [
+          {
+            "node": "Read Latest Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is 1?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Latest Email": {
+      "main": [
+        [
+          {
+            "node": "Block",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is 1?": {
+      "main": [
+        [
+          {
+            "node": "Ask Amount",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block": {
+      "main": [
+        [
+          {
+            "node": "Confirm Block",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "Ask",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "047a7f39-6aa7-483f-9059-91b9f34cb41c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2c851d0f76108f3fab9ddb058df7631c030cfc3c05feba29b577d833b0cb12f4"
+  },
+  "id": "xhCFxcvyTlFISsxn",
+  "tags": []
+}

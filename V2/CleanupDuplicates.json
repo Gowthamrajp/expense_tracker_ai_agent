@@ -1,0 +1,373 @@
+{
+  "name": "CleanupDuplicates",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "manual-trigger-1",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list",
+          "cachedResultName": "PersonalExpenseTracker"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        460,
+        200
+      ],
+      "id": "read-transactions",
+      "name": "Read Transactions",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list",
+          "cachedResultName": "PersonalExpenseTracker"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 414631077,
+          "mode": "list",
+          "cachedResultName": "unrecognized_emails"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        460,
+        400
+      ],
+      "id": "read-unrecognized",
+      "name": "Read Unrecognized",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Find unique transactions (keep first occurrence)\nconst items = $input.all();\nconst rows = items.map(i => i.json);\n\nconst seen = new Map();\nconst unique = [];\nlet duplicateCount = 0;\n\nfor (const row of rows) {\n  const id = row.gmail_message_id;\n  \n  if (!id) {\n    unique.push({ json: row });\n    continue;\n  }\n  \n  if (!seen.has(id)) {\n    seen.set(id, true);\n    unique.push({ json: row });\n  } else {\n    duplicateCount++;\n  }\n}\n\nconsole.log(`Transactions: ${rows.length} total → ${unique.length} unique (${duplicateCount} duplicates removed)`);\n\nreturn unique;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        200
+      ],
+      "id": "find-transaction-dupes",
+      "name": "Find Unique Transactions"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Find unique unrecognized emails (keep first occurrence)\nconst items = $input.all();\nconst rows = items.map(i => i.json);\n\nconst seen = new Map();\nconst unique = [];\nlet duplicateCount = 0;\n\nfor (const row of rows) {\n  const id = row.gmail_message_id;\n  \n  if (!id) {\n    unique.push({ json: row });\n    continue;\n  }\n  \n  if (!seen.has(id)) {\n    seen.set(id, true);\n    unique.push({ json: row });\n  } else {\n    duplicateCount++;\n  }\n}\n\nconsole.log(`Unrecognized: ${rows.length} total → ${unique.length} unique (${duplicateCount} duplicates removed)`);\n\nreturn unique;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        400
+      ],
+      "id": "find-unrecognized-dupes",
+      "name": "Find Unique Unrecognized"
+    },
+    {
+      "parameters": {
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list",
+          "cachedResultName": "PersonalExpenseTracker"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        900,
+        200
+      ],
+      "id": "clear-transactions",
+      "name": "Clear Transactions Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list",
+          "cachedResultName": "PersonalExpenseTracker"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 414631077,
+          "mode": "list",
+          "cachedResultName": "unrecognized_emails"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        900,
+        400
+      ],
+      "id": "clear-unrecognized",
+      "name": "Clear Unrecognized Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list",
+          "cachedResultName": "PersonalExpenseTracker"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1100,
+        200
+      ],
+      "id": "write-unique-transactions",
+      "name": "Write Unique Transactions",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list",
+          "cachedResultName": "PersonalExpenseTracker"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 414631077,
+          "mode": "list",
+          "cachedResultName": "unrecognized_emails"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1100,
+        400
+      ],
+      "id": "write-unique-unrecognized",
+      "name": "Write Unique Unrecognized",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Summary of cleanup\nconst txnKept = $input.all(0);\nconst unrecKept = $input.all(1);\n\nreturn [{\n  json: {\n    message: 'Duplicates removed successfully! ✅',\n    transactions_remaining: txnKept.length,\n    unrecognized_remaining: unrecKept.length,\n    note: 'Both sheets have been cleaned. Only unique entries remain.'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        300
+      ],
+      "id": "final-summary",
+      "name": "Final Summary"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Transactions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Unrecognized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Transactions": {
+      "main": [
+        [
+          {
+            "node": "Find Unique Transactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Unrecognized": {
+      "main": [
+        [
+          {
+            "node": "Find Unique Unrecognized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Unique Transactions": {
+      "main": [
+        [
+          {
+            "node": "Clear Transactions Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Unique Unrecognized": {
+      "main": [
+        [
+          {
+            "node": "Clear Unrecognized Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear Transactions Sheet": {
+      "main": [
+        [
+          {
+            "node": "Write Unique Transactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear Unrecognized Sheet": {
+      "main": [
+        [
+          {
+            "node": "Write Unique Unrecognized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Unique Transactions": {
+      "main": [
+        [
+          {
+            "node": "Final Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Unique Unrecognized": {
+      "main": [
+        [
+          {
+            "node": "Final Summary",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "cleanup-duplicates",
+  "tags": []
+}

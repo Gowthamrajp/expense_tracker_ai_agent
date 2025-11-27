@@ -1,0 +1,539 @@
+{
+  "name": "PersonalExpenseTracker",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -464,
+        80
+      ],
+      "id": "a36cbc9e-016f-4b29-b851-3937c3bfb329",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "// PERFORMANCE-OPTIMIZED DEDUPLICATION\n// Uses workflow static data to track processed Gmail message IDs\n// This avoids reading thousands of rows from Google Sheets every run\n// Stores up to 10,000 message IDs (handles ~1 year of daily transactions)\n\nconst staticData = $getWorkflowStaticData('global');\n\nif (!staticData.processedIds) {\n  staticData.processedIds = {};\n}\n\nconst processedIds = staticData.processedIds;\nconst newItems = [];\n\nfor (const item of $input.all()) {\n  const id = item.json.id;  // Gmail message ID\n\n  if (!id) {\n    continue;\n  }\n\n  if (processedIds[id]) {\n    // Already processed → skip (prevents duplicates in both sheets)\n    continue;\n  }\n\n  // Mark as processed\n  processedIds[id] = true;\n  newItems.push(item);\n}\n\n// Maintain a rolling window of processed IDs to prevent memory bloat\nconst MAX_IDS = 10000;  // Increased capacity for better deduplication\nconst idsList = Object.keys(processedIds);\nif (idsList.length > MAX_IDS) {\n  // Keep most recent MAX_IDS entries\n  const trimmed = {};\n  idsList.slice(-MAX_IDS).forEach(id => {\n    trimmed[id] = true;\n  });\n  staticData.processedIds = trimmed;\n} else {\n  staticData.processedIds = processedIds;\n}\n\nconsole.log(`Dedup: ${$input.all().length} emails → ${newItems.length} new (tracking ${Object.keys(staticData.processedIds).length} IDs)`);\n\nreturn newItems;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        80
+      ],
+      "id": "98f957cd-3a17-4d03-ab15-14fc772575af",
+      "name": "Dedup"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d38f3930-9890-455f-b9dc-bd9c12525ac5",
+              "leftValue": "={{ $json.parsed.amount }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "5169ceb7-baca-44b4-990d-d54d0130991f",
+              "leftValue": "={{ $json.parsed.provider_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        432,
+        80
+      ],
+      "id": "2e3a9269-7e4b-4683-8d5b-c97d3eea16f3",
+      "name": "If Valid Transaction",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list",
+          "cachedResultName": "PersonalExpenseTracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 414631077,
+          "mode": "list",
+          "cachedResultName": "unrecognized_emails",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI/edit#gid=414631077"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{$now}}",
+            "gmail_message_id": "={{ $json.id }}",
+            "email_from": "={{ $json.From }}",
+            "email_subject": "={{ $json.Subject }}",
+            "provider_guess": "={{ $json.parsed.provider_guess }}",
+            "snippet_or_body": "={{ $json.snippet }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gmail_message_id",
+              "displayName": "gmail_message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email_from",
+              "displayName": "email_from",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email_subject",
+              "displayName": "email_subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "snippet_or_body",
+              "displayName": "snippet_or_body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "provider_guess",
+              "displayName": "provider_guess",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        704,
+        272
+      ],
+      "id": "d1eff735-c545-4e62-bf3b-1e02faa6bd9c",
+      "name": "Log Unrecognized",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list",
+          "cachedResultName": "PersonalExpenseTracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 158720576,
+          "mode": "list",
+          "cachedResultName": "providers",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI/edit#gid=158720576"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -272,
+        272
+      ],
+      "id": "121bd056-663b-41f8-8e0f-eba7dd2ab792",
+      "name": "Read Providers Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// INPUT 0: Gmail messages\n// INPUT 1: Providers sheet rows\n// MODE: Run once for all items\n\n// Get the two input streams explicitly\nlet emailItems   = $input.all(0).map(i => i.json);\nlet providerRows = $input.all(1).map(i => i.json);\n\n// Extra safety: ensure we only treat real emails as emails\nemailItems = emailItems.filter(e => e.id || e.From || e.Subject);\n\n// Normalise helpers\nconst norm = (v) => (v || '').toString().toLowerCase();\n\n// Strip display name and keep just email address if possible\nconst extractEmail = (from) => {\n  if (!from) return '';\n  const m = from.match(/<([^>]+)>/);\n  return m ? m[1].toLowerCase() : from.toLowerCase();\n};\n\n// Build a clean providers list\nconst providers = providerRows\n  .filter(r => String(r.active).toLowerCase() === 'true')\n  .map(r => ({\n    provider_id:     r.provider_id,\n    from_contains:   norm(r.from_contains),\n    subject_contains:norm(r.subject_contains),\n    body_contains:   norm(r.body_contains),\n    regex_amount:    r.regex_amount || '',\n    regex_merchant:  r.regex_merchant || '',\n    regex_date:      r.regex_date || '',\n    regex_reference: r.regex_reference || '',\n    notes:           r.notes || '',\n  }));\n\nconst results = [];\n\nfor (const email of emailItems) {\n  const fromRaw   = email.From || email.from || '';\n  const fromEmail = extractEmail(fromRaw);\n  const subject   = email.Subject || email.subject || '';\n  const snippet   = email.snippet || '';\n\n  const fromL   = norm(fromEmail);\n  const subjL   = norm(subject);\n  const bodyL   = norm(snippet);   // ⬅ using snippet as our body for now\n\n  let matchedRule = null;\n\n  // 1) FIND MATCHING PROVIDER RULE (if any)\n  for (const rule of providers) {\n    // All non-empty filters must match\n    if (rule.from_contains   && !fromL.includes(rule.from_contains))     continue;\n    if (rule.subject_contains&& !subjL.includes(rule.subject_contains))  continue;\n    if (rule.body_contains   && !bodyL.includes(rule.body_contains))     continue;\n\n    matchedRule = rule;\n    break;\n  }\n\n  // Base parsed object\n  const parsed = {\n    provider_id: null,\n    reason: null,\n  };\n\n  if (!matchedRule) {\n    // No rule matched → unrecognized email\n    parsed.reason = 'No matching provider rule';\n  } else {\n    // 2) APPLY REGEXES FOR THE MATCHED PROVIDER\n    const bodyForRegex = snippet || ''; // using snippet for now\n\n    // Amount\n    let amount = null;\n    if (matchedRule.regex_amount) {\n      try {\n        const reAmt = new RegExp(matchedRule.regex_amount, 'i');\n        const mAmt = bodyForRegex.match(reAmt);\n        if (mAmt && mAmt[1]) {\n          amount = parseFloat(mAmt[1].replace(/,/g, ''));\n        }\n      } catch (e) {\n        // ignore regex errors for now\n      }\n    }\n\n    // Merchant\n    let merchant = null;\n    if (matchedRule.regex_merchant) {\n      try {\n        const reMer = new RegExp(matchedRule.regex_merchant, 'i');\n        const mMer = bodyForRegex.match(reMer);\n        if (mMer && mMer[1]) {\n          merchant = mMer[1].trim();\n        }\n      } catch (e) {}\n    }\n\n    // Date\n    let raw_date = null;\n    if (matchedRule.regex_date) {\n      try {\n        const reDate = new RegExp(matchedRule.regex_date, 'i');\n        const mDate = bodyForRegex.match(reDate);\n        if (mDate && mDate[1]) {\n          raw_date = mDate[1].trim();\n        }\n      } catch (e) {}\n    }\n\n    // Reference\n    let reference = null;\n    if (matchedRule.regex_reference) {\n      try {\n        const reRef = new RegExp(matchedRule.regex_reference, 'i');\n        const mRef = bodyForRegex.match(reRef);\n        if (mRef && mRef[1]) {\n          reference = mRef[1].trim();\n        }\n      } catch (e) {}\n    }\n\n    if (amount !== null) {\n      // ✅ Successful parse\n      parsed.provider_id     = matchedRule.provider_id;\n      parsed.type            = 'DEBIT';             // all current providers are debits\n      parsed.amount          = amount;\n      parsed.currency        = 'INR';               // fixed for now\n      parsed.merchant        = merchant || null;\n      parsed.raw_date        = raw_date || null;\n      parsed.reference       = reference || null;\n      parsed.source_instrument = null;\n      parsed.source_last4    = null;\n\n      parsed.gmail_message_id = email.id || email.gmail_message_id || null;\n      parsed.email_from       = fromRaw;\n      parsed.email_subject    = subject;\n      parsed.raw_body         = snippet;            // ⬅ for now use snippet\n      parsed.provider_guess   = matchedRule.provider_id;\n      parsed.reason           = 'Parsed with provider rule';\n    } else {\n      // ❗ Rule matched but amount failed → treat as unrecognized but keep guess\n      parsed.provider_id    = null;\n      parsed.reason         = 'Matched provider filters but amount regex failed';\n      parsed.provider_guess = matchedRule.provider_id;\n      parsed.gmail_message_id = email.id || null;\n      parsed.email_from       = fromRaw;\n      parsed.email_subject    = subject;\n      parsed.raw_body         = snippet;\n    }\n  }\n\n  // Attach parsed to email item\n  results.push({\n    json: {\n      ...email,\n      parsed,\n    },\n  });\n}\n\n// 🔒 IMPORTANT: only return EMAIL results, NOT providers\nreturn results;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        192,
+        80
+      ],
+      "id": "0f49aeee-8cf8-42cd-9874-563bf6d128cc",
+      "name": "Dynamic Parse Transaction"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        48,
+        256
+      ],
+      "id": "69aac730-a1a9-4820-bd58-bca3a5d5dd92",
+      "name": "Merge Emails + Providers"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "filters": {
+          "q": "newer_than:2d"
+        },
+        "options": {
+          "maxResults": 100
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -272,
+        80
+      ],
+      "id": "f7262af2-bedf-4c8d-9e8b-7d4831a16a4b",
+      "name": "Get Emails",
+      "webhookId": "7896bfe0-912c-4acb-9f13-438a778bf965",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "9kA62VGEA4jdQA6q",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list",
+          "cachedResultName": "PersonalExpenseTracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{$now}}",
+            "gmail_message_id": "={{ $json.parsed.gmail_message_id }}",
+            "provider_id": "={{ $json.parsed.provider_id }}",
+            "currency": "={{ $json.parsed.currency }}",
+            "merchant": "={{ $json.parsed.merchant }}",
+            "category": "",
+            "subcategory": "",
+            "email_from": "={{ $json.parsed.email_from }}",
+            "email_subject": "={{ $json.parsed.email_subject }}",
+            "raw_body": "={{ $json.parsed.raw_body }}",
+            "raw_date": "={{ $json.parsed.raw_date }}",
+            "type": "={{ $json.parsed.type }}",
+            "amount": "={{ $json.parsed.amount }}",
+            "reference": "={{ $json.parsed.reference }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gmail_message_id",
+              "displayName": "gmail_message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "provider_id",
+              "displayName": "provider_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "amount",
+              "displayName": "amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "currency",
+              "displayName": "currency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "merchant",
+              "displayName": "merchant",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reference",
+              "displayName": "reference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email_from",
+              "displayName": "email_from",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email_subject",
+              "displayName": "email_subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "raw_date",
+              "displayName": "raw_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "raw_body",
+              "displayName": "raw_body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        992,
+        -32
+      ],
+      "id": "78b224c8-458c-4f0c-abc9-b5f595e721e7",
+      "name": "Append to Transactions",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Emails",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Providers Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dedup": {
+      "main": [
+        [
+          {
+            "node": "Merge Emails + Providers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Valid Transaction": {
+      "main": [
+        [
+          {
+            "node": "Append to Transactions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Unrecognized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dynamic Parse Transaction": {
+      "main": [
+        [
+          {
+            "node": "If Valid Transaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Providers Sheet": {
+      "main": [
+        [
+          {
+            "node": "Merge Emails + Providers",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Emails + Providers": {
+      "main": [
+        [
+          {
+            "node": "Dynamic Parse Transaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Emails": {
+      "main": [
+        [
+          {
+            "node": "Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "9af933a7-39e4-45c9-bac2-56024783e111",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2c851d0f76108f3fab9ddb058df7631c030cfc3c05feba29b577d833b0cb12f4"
+  },
+  "id": "IQzSHDxLEeRwxYci",
+  "tags": []
+}

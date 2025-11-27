@@ -1,0 +1,514 @@
+{
+  "name": "CategoryMapper_Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 2
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -460,
+        260
+      ],
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list",
+          "cachedResultName": "PersonalExpenseTracker"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "category",
+              "lookupValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -260,
+        260
+      ],
+      "id": "read-uncategorized",
+      "name": "Read Uncategorized Transactions",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list",
+          "cachedResultName": "PersonalExpenseTracker"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "categories",
+          "mode": "list",
+          "cachedResultName": "categories"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -260,
+        420
+      ],
+      "id": "read-categories",
+      "name": "Read Categories",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list",
+          "cachedResultName": "PersonalExpenseTracker"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "merchant_mappings",
+          "mode": "list",
+          "cachedResultName": "merchant_mappings"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -260,
+        580
+      ],
+      "id": "read-mappings",
+      "name": "Read Merchant Mappings",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Categorize transactions using existing merchant mappings\nconst uncategorized = $input.all(0).map(i => i.json);\nconst categories = $input.all(1).map(i => i.json);\nconst mappings = $input.all(2).map(i => i.json);\n\n// Build merchant mapping lookup\nconst merchantMap = {};\nmappings.forEach(m => {\n  if (m.merchant_key && m.category && m.subcategory) {\n    merchantMap[m.merchant_key.toLowerCase()] = {\n      category: m.category,\n      subcategory: m.subcategory\n    };\n  }\n});\n\nconst needsUserInput = [];\nconst autoMapped = [];\n\nfor (const txn of uncategorized) {\n  const merchant = (txn.merchant || '').toLowerCase().trim();\n  \n  if (merchant && merchantMap[merchant]) {\n    // Auto-map using existing mapping\n    autoMapped.push({\n      json: {\n        ...txn,\n        category: merchantMap[merchant].category,\n        subcategory: merchantMap[merchant].subcategory,\n        mapping_source: 'auto'\n      }\n    });\n  } else {\n    // Needs user input\n    needsUserInput.push({ json: txn });\n  }\n}\n\nconsole.log(`Auto-mapped: ${autoMapped.length}, Needs user input: ${needsUserInput.length}`);\n\nreturn {\n  automapped: autoMapped,\n  needsinput: needsUserInput\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        340
+      ],
+      "id": "auto-categorize",
+      "name": "Auto Categorize"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare Telegram message with category options\nconst items = $input.all();\nconst categories = items.map(i => i.json);\n\n// Group by category\nconst categoryGroups = {};\ncategories.forEach(c => {\n  if (!categoryGroups[c.category]) {\n    categoryGroups[c.category] = [];\n  }\n  if (c.subcategory && !categoryGroups[c.category].includes(c.subcategory)) {\n    categoryGroups[c.category].push(c.subcategory);\n  }\n});\n\n// Format as numbered list\nlet optionText = \"Available Categories:\\n\\n\";\nlet optionIndex = 1;\nconst optionMap = {};\n\nfor (const [category, subcategories] of Object.entries(categoryGroups)) {\n  optionText += `${optionIndex}. ${category}\\n`;\n  optionMap[optionIndex] = { category, subcategory: null };\n  optionIndex++;\n  \n  subcategories.forEach(sub => {\n    optionText += `   ${optionIndex}. ${category} > ${sub}\\n`;\n    optionMap[optionIndex] = { category, subcategory: sub };\n    optionIndex++;\n  });\n  optionText += \"\\n\";\n}\n\noptionText += `${optionIndex}. ➕ Add New Category\\n`;\noptionMap[optionIndex] = { category: 'NEW', subcategory: null };\n\nreturn [{\n  json: {\n    categories: categoryGroups,\n    option_text: optionText,\n    option_map: optionMap\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        160
+      ],
+      "id": "build-category-options",
+      "name": "Build Category Options"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process one transaction at a time for Telegram interaction\nconst items = $input.all();\n\nif (items.length === 0) {\n  return [];\n}\n\n// Take first uncategorized transaction\nreturn [items[0]];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        340
+      ],
+      "id": "get-first-txn",
+      "name": "Get First Transaction"
+    },
+    {
+      "parameters": {
+        "chatId": "5069314600",
+        "text": "=🏷️ **New Transaction Needs Categorization**\\n\\n💰 Amount: ₹{{ $json.amount }}\\n🏪 Merchant: {{ $json.merchant || 'Unknown' }}\\n📅 Date: {{ $json.timestamp }}\\n\\n{{ $('Build Category Options').item.json.option_text }}\\n\\nReply with the number of your choice.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        400,
+        260
+      ],
+      "id": "send-telegram-msg",
+      "name": "Send to Telegram",
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      },
+      "webhookId": "telegram-category-mapper"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -460,
+        560
+      ],
+      "id": "telegram-response",
+      "name": "Telegram Response",
+      "webhookId": "telegram-category-response",
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse user's response and update transaction\nconst response = $json.message.text;\nconst chatId = $json.message.chat.id;\n\n// Get the stored option map from static data\nconst staticData = $getWorkflowStaticData('global');\nconst optionMap = staticData.currentOptionMap || {};\nconst currentTxn = staticData.currentTransaction || {};\n\nconst choice = parseInt(response);\n\nif (!optionMap[choice]) {\n  return [{\n    json: {\n      reply: '❌ Invalid choice. Please reply with a valid number.',\n      chatId: chatId\n    }\n  }];\n}\n\nconst selected = optionMap[choice];\n\nif (selected.category === 'NEW') {\n  // User wants to add new category\n  staticData.awaitingNewCategory = true;\n  return [{\n    json: {\n      reply: '✏️ Please enter the new category name (or \"cancel\" to abort):',\n      chatId: chatId,\n      action: 'awaiting_new_category'\n    }\n  }];\n}\n\n// Apply category to transaction\nreturn [{\n  json: {\n    ...currentTxn,\n    category: selected.category,\n    subcategory: selected.subcategory,\n    row_id: staticData.currentRowId,\n    reply: `✅ Categorized as: ${selected.category}${selected.subcategory ? ' > ' + selected.subcategory : ''}`,\n    chatId: chatId,\n    action: 'update_transaction'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        560
+      ],
+      "id": "parse-response",
+      "name": "Parse User Response"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list",
+          "cachedResultName": "PersonalExpenseTracker"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "category": "={{ $json.category }}",
+            "subcategory": "={{ $json.subcategory }}"
+          },
+          "matchingColumns": [
+            "gmail_message_id"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -20,
+        480
+      ],
+      "id": "update-transaction",
+      "name": "Update Transaction Category",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1nxnop_t5AAS9--GyF5ANEyXb_9pAntZv_nA8IxqV4ZI",
+          "mode": "list",
+          "cachedResultName": "PersonalExpenseTracker"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "merchant_mappings",
+          "mode": "list",
+          "cachedResultName": "merchant_mappings"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "merchant_key": "={{ $json.merchant }}",
+            "category": "={{ $json.category }}",
+            "subcategory": "={{ $json.subcategory }}",
+            "learned_at": "={{$now}}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        200,
+        480
+      ],
+      "id": "save-mapping",
+      "name": "Save Merchant Mapping",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XatxAW4b5BSRepKb",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.reply }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        420,
+        480
+      ],
+      "id": "confirm-telegram",
+      "name": "Confirm via Telegram",
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -40,
+        340
+      ],
+      "id": "merge-data",
+      "name": "Merge Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store transaction data and options in static data for Telegram trigger to access\nconst staticData = $getWorkflowStaticData('global');\n\nconst txn = $input.first().json;\nconst optionMap = $input.item(0).json.option_map;\n\n// Store for Telegram response handler\nstaticData.currentTransaction = txn;\nstaticData.currentOptionMap = optionMap;\nstaticData.currentRowId = txn.row_number || null;\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        260
+      ],
+      "id": "store-context",
+      "name": "Store Context"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Uncategorized Transactions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Categories",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Merchant Mappings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Uncategorized Transactions": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Categories": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Build Category Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Merchant Mappings": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Data": {
+      "main": [
+        [
+          {
+            "node": "Auto Categorize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto Categorize": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Get First Transaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get First Transaction": {
+      "main": [
+        [
+          {
+            "node": "Store Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Context": {
+      "main": [
+        [
+          {
+            "node": "Send to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Response": {
+      "main": [
+        [
+          {
+            "node": "Parse User Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse User Response": {
+      "main": [
+        [
+          {
+            "node": "Update Transaction Category",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Transaction Category": {
+      "main": [
+        [
+          {
+            "node": "Save Merchant Mapping",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Merchant Mapping": {
+      "main": [
+        [
+          {
+            "node": "Confirm via Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "category-mapper-telegram",
+  "tags": []
+}
